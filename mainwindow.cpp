@@ -5,6 +5,9 @@
 #include <QMessageBox>
 #include <QImageReader>
 #include <QScrollArea>
+#include <QFileInfo>
+#include <QTextEdit>
+#include <QGroupBox>
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     // Центральный виджет
@@ -52,20 +55,42 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     });
     rightLayout->addWidget(mediaList);
 
+    // Контейнер для медиа (изображения и видео)
+    QWidget *mediaContainer = new QWidget();
+    QVBoxLayout *mediaContainerLayout = new QVBoxLayout(mediaContainer);
+    mediaContainerLayout->setContentsMargins(0, 0, 0, 0);
+    
     // Виджет для медиа
     mediaLabel = new QLabel();
     mediaLabel->setAlignment(Qt::AlignCenter);
     mediaLabel->setScaledContents(true);
-    mediaLabel->setMinimumSize(400, 300);
+    mediaLabel->setMinimumSize(800, 600);  // Увеличенный размер
 
     videoWidget = new QVideoWidget();
+    videoWidget->setMinimumSize(800, 600);  // Увеличенный размер
     mediaPlayer = new QMediaPlayer();
     mediaPlayer->setVideoOutput(videoWidget);
     videoWidget->hide();  // Скрываем по умолчанию
+    
+    mediaContainerLayout->addWidget(mediaLabel);
+    mediaContainerLayout->addWidget(videoWidget);
 
     QScrollArea *mediaScroll = new QScrollArea();
-    mediaScroll->setWidget(mediaLabel);  // По умолчанию показываем изображения
-    rightLayout->addWidget(mediaScroll);
+    mediaScroll->setWidget(mediaContainer);  // Контейнер с обоими виджетами
+    mediaScroll->setWidgetResizable(true);
+    rightLayout->addWidget(mediaScroll, 2);  // Больше места для медиа
+
+    // Виджет для отображения информации о файле
+    QGroupBox *infoGroup = new QGroupBox("Информация о файле");
+    QVBoxLayout *infoLayout = new QVBoxLayout();
+    infoLabel = new QLabel();
+    infoLabel->setTextFormat(Qt::RichText);
+    infoLabel->setWordWrap(true);
+    infoLabel->setAlignment(Qt::AlignTop | Qt::AlignLeft);
+    infoLabel->setText("Выберите файл для просмотра информации");
+    infoLayout->addWidget(infoLabel);
+    infoGroup->setLayout(infoLayout);
+    rightLayout->addWidget(infoGroup, 1);  // Меньше места для информации
 
     mainLayout->addLayout(rightLayout);
 
@@ -76,7 +101,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     completer->setModel(model);
 
     setWindowTitle("Local Booru Viewer");
-    resize(800, 600);
+    resize(1200, 800);  // Увеличенный размер окна
 }
 
 MainWindow::~MainWindow() {}
@@ -99,14 +124,47 @@ void MainWindow::selectFolder() {
 
 void MainWindow::loadMedia(const QString &filePath) {
     currentFile = QFileInfo(filePath).fileName();
+    QFileInfo fileInfo(filePath);
 
     // Определяем тип: изображение или видео
-    QString suffix = QFileInfo(filePath).suffix().toLower();
-    if (suffix == "mp4" || suffix == "avi") {  // Видео
+    QString suffix = fileInfo.suffix().toLower();
+    QString infoText = "<b>Расширение:</b> " + suffix.toUpper() + "<br>";
+
+    if (suffix == "mp4" || suffix == "avi" || suffix == "mov" || suffix == "mkv" || suffix == "webm") {  // Видео
         mediaLabel->hide();
         videoWidget->show();
+        
+        // Отключаем предыдущие соединения, чтобы избежать множественных вызовов
+        disconnect(mediaPlayer, &QMediaPlayer::metaDataChanged, nullptr, nullptr);
+        
         mediaPlayer->setSource(QUrl::fromLocalFile(filePath));
         mediaPlayer->play();
+
+        // Получаем информацию о видео
+        // Разрешение и кодировка будут доступны после загрузки метаданных
+        connect(mediaPlayer, &QMediaPlayer::metaDataChanged, this, [this, suffix]() {
+            QSize resolution = mediaPlayer->metaData().value(QMediaMetaData::Resolution).toSize();
+            QString codec = mediaPlayer->metaData().value(QMediaMetaData::VideoCodec).toString();
+            
+            QString videoInfo = "<b>Расширение:</b> " + suffix.toUpper() + "<br>";
+            if (!resolution.isNull()) {
+                videoInfo += "<b>Разрешение:</b> " + QString::number(resolution.width()) + 
+                            " x " + QString::number(resolution.height()) + "<br>";
+            } else {
+                videoInfo += "<b>Разрешение:</b> Неизвестно<br>";
+            }
+            if (!codec.isEmpty()) {
+                videoInfo += "<b>Кодировка:</b> " + codec + "<br>";
+            } else {
+                videoInfo += "<b>Кодировка:</b> Неизвестно<br>";
+            }
+            infoLabel->setText(videoInfo);
+        });
+
+        // Временная информация до загрузки метаданных
+        infoText += "<b>Разрешение:</b> Загрузка...<br>";
+        infoText += "<b>Кодировка:</b> Загрузка...<br>";
+        infoLabel->setText(infoText);
     } else {  // Изображение
         videoWidget->hide();
         mediaLabel->show();
@@ -115,7 +173,17 @@ void MainWindow::loadMedia(const QString &filePath) {
             QMessageBox::warning(this, "Ошибка", "Не удалось загрузить изображение.");
             return;
         }
-        mediaLabel->setPixmap(pixmap.scaled(mediaLabel->size(), Qt::KeepAspectRatio));
+        
+        // Получаем информацию об изображении
+        QSize resolution = pixmap.size();
+        infoText += "<b>Разрешение:</b> " + QString::number(resolution.width()) + 
+                   " x " + QString::number(resolution.height()) + "<br>";
+        
+        // Для изображений кодировка = формат файла
+        infoText += "<b>Кодировка:</b> " + suffix.toUpper() + "<br>";
+        
+        mediaLabel->setPixmap(pixmap.scaled(mediaLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        infoLabel->setText(infoText);
     }
 
     // Отображаем теги

@@ -10,6 +10,7 @@
 #include <QCompleter>
 #include <QMediaPlayer>
 #include <QVideoWidget>
+#include <QMediaMetaData>
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -39,6 +40,7 @@ private:
     QLabel *mediaLabel;  // Для изображений
     QVideoWidget *videoWidget;  // Для видео
     QMediaPlayer *mediaPlayer;  // Плеер для видео
+    QLabel *infoLabel;  // Для отображения информации о файле
     QListWidget *tagList;  // Список тегов слева
     QLineEdit *tagInput;  // Поле для добавления тега
     QPushButton *addTagButton;  // Кнопка добавления тега
